@@ -22,7 +22,7 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 function loadJSON(filename) {
   const file = path.join(DATA_DIR, filename);
   try { return JSON.parse(fs.readFileSync(file, 'utf-8')); }
-  catch { return {}; }
+  catch { return []; }
 }
 
 function saveJSON(filename, data) {
