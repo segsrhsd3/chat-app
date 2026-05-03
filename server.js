@@ -29,8 +29,12 @@ function saveJSON(filename, data) {
   fs.writeFileSync(path.join(DATA_DIR, filename), JSON.stringify(data, null, 2));
 }
 
+function generateId() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+}
+
 // === СОСТОЯНИЕ ===
-let messages = [];            // { room, user, avatar, text, type, time, image? }
+let messages = [];            // { id, room, user, avatar, text, type, time, image?, voice? }
 let onlineUsers = new Map();  // socket.id -> { name, avatar, room }
 
 // Загружаем старые сообщения при старте
@@ -53,10 +57,27 @@ io.on('connection', (socket) => {
     socket.emit('chat history', roomMsgs);
 
     // Системное сообщение
-    const joinMsg = { room, type: 'system', text: `${data.name} вошёл`, time: getTime() };
+    const joinMsg = { id: generateId(), room, type: 'system', text: `${data.name} вошёл`, time: getTime() };
     messages.push(joinMsg);
     io.to(room).emit('chat message', joinMsg);
 
+    updateOnline(room);
+  });
+
+  socket.on('join room', (room) => {
+    const user = onlineUsers.get(socket.id);
+    if (!user) return;
+    const previousRoom = user.room;
+    if (previousRoom === room) return;
+
+    socket.leave(previousRoom);
+    socket.join(room);
+    user.room = room;
+    onlineUsers.set(socket.id, user);
+
+    const roomMsgs = messages.filter(m => m.room === room).slice(-200);
+    socket.emit('chat history', roomMsgs);
+    updateOnline(previousRoom);
     updateOnline(room);
   });
 
@@ -66,12 +87,14 @@ io.on('connection', (socket) => {
     const room = user.room;
 
     const msg = {
+      id: generateId(),
       room,
-      type: data.image ? 'image' : 'message',
+      type: data.image ? 'image' : data.voice ? 'voice' : 'message',
       user: user.name,
       avatar: user.avatar,
       text: data.text || '',
       image: data.image || null,
+      voice: data.voice || null,
       time: getTime()
     };
     messages.push(msg);
